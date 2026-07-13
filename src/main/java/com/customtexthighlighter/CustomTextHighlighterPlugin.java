@@ -22,197 +22,196 @@ import net.runelite.client.util.Text;
 
 @Slf4j
 @PluginDescriptor(
-    name = "Custom Text Highlighter",
-    description = "Highlights custom text in game messages",
-    tags = {"chat", "text", "highlight", "colour", "color", "wildcard"}
+	name = "Custom Text Highlighter",
+	description = "Highlights custom text in game messages",
+	tags = {"chat", "text", "highlight", "colour", "color", "wildcard"}
 )
 public class CustomTextHighlighterPlugin extends Plugin
 {
-    private static final String PREVIEW_PREFIX = "Custom Text Highlighter preview: ";
+	private static final String PREVIEW_PREFIX = "Custom Text Highlighter preview: ";
 
-    @Inject
-    private Client client;
+	@Inject
+	private Client client;
 
-    @Inject
-    private ClientThread clientThread;
+	@Inject
+	private ClientThread clientThread;
 
-    @Inject
-    private CustomTextHighlighterConfig config;
+	@Inject
+	private CustomTextHighlighterConfig config;
 
-    private List<HighlightRule> rules = Collections.emptyList();
+	private List<HighlightRule> rules = Collections.emptyList();
 
-    @Provides
-    CustomTextHighlighterConfig provideConfig(ConfigManager configManager)
-    {
-        return configManager.getConfig(CustomTextHighlighterConfig.class);
-    }
+	@Provides
+	CustomTextHighlighterConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(CustomTextHighlighterConfig.class);
+	}
 
-    @Override
-    protected void startUp()
-    {
-        loadRules();
-    }
+	@Override
+	protected void startUp()
+	{
+		loadRules();
+	}
 
-    @Override
-    protected void shutDown()
-    {
-        rules = Collections.emptyList();
-    }
+	@Override
+	protected void shutDown()
+	{
+		rules = Collections.emptyList();
+	}
 
-    @Subscribe
-    public void onConfigChanged(ConfigChanged event)
-    {
-        if (!CustomTextHighlighterConfig.GROUP.equals(event.getGroup()))
-        {
-            return;
-        }
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!CustomTextHighlighterConfig.GROUP.equals(event.getGroup()))
+		{
+			return;
+		}
 
-        if ("rules".equals(event.getKey()))
-        {
-            loadRules();
-            return;
-        }
+		if ("rules".equals(event.getKey()))
+		{
+			loadRules();
+			return;
+		}
 
-        if ("sendPreview".equals(event.getKey()))
-        {
-            sendPreviewMessage();
-        }
-    }
+		if ("sendPreview".equals(event.getKey()))
+		{
+			sendPreviewMessage();
+		}
+	}
 
-    /*
-     * Lower priority runs later, allowing this plugin to apply its formatting
-     * after most other chat recolouring plugins.
-     */
-    @Subscribe(priority = -1000.0f)
-    public void onChatMessage(ChatMessage event)
-    {
-        if (!isSupportedMessageType(event.getType()))
-        {
-            return;
-        }
+	/*
+	 * Lower priority runs later, allowing this plugin to apply its formatting
+	 * after most other chat recoloring plugins.
+	 */
+	@Subscribe(priority = -1000.0f)
+	public void onChatMessage(ChatMessage event)
+	{
+		if (!isEnabledMessageType(event.getType()))
+		{
+			return;
+		}
 
-        MessageNode messageNode = event.getMessageNode();
-        if (messageNode == null)
-        {
-            return;
-        }
+		MessageNode messageNode = event.getMessageNode();
+		if (messageNode == null)
+		{
+			return;
+		}
 
-        String plainMessage = Text.removeTags(event.getMessage());
+		String plainMessage = Text.removeTags(event.getMessage());
+		if (plainMessage.startsWith(PREVIEW_PREFIX))
+		{
+			return;
+		}
 
-        if (plainMessage.startsWith(PREVIEW_PREFIX))
-        {
-            return;
-        }
+		String highlightedMessage = plainMessage;
+		boolean changed = false;
+		for (HighlightRule rule : rules)
+		{
+			String result = rule.apply(highlightedMessage);
+			if (result != null)
+			{
+				highlightedMessage = result;
+				changed = true;
+			}
+		}
 
-        String highlightedMessage = plainMessage;
-        boolean changed = false;
+		if (changed)
+		{
+			messageNode.setRuneLiteFormatMessage(highlightedMessage);
+			client.refreshChat();
+		}
+	}
 
-        for (HighlightRule rule : rules)
-        {
-            String result = rule.apply(highlightedMessage);
+	private boolean isEnabledMessageType(ChatMessageType type)
+	{
+		switch (type)
+		{
+			case GAMEMESSAGE:
+			case SPAM:
+			case ENGINE:
+			case MESBOX:
+			case LEVELUPMESSAGE:
+				return config.highlightGameMessages();
+			case PUBLICCHAT:
+			case MODCHAT:
+				return config.highlightPublicChat();
+			case PRIVATECHAT:
+			case PRIVATECHATOUT:
+			case MODPRIVATECHAT:
+				return config.highlightPrivateMessages();
+			case CLAN_CHAT:
+			case CLAN_GIM_CHAT:
+				return config.highlightClanChat();
+			case FRIENDSCHAT:
+				return config.highlightFriendsChat();
+			case CLAN_GUEST_CHAT:
+				return config.highlightGuestClanChat();
+			case AUTOTYPER:
+			case MODAUTOTYPER:
+				return config.highlightOtherChat();
+			default:
+				return false;
+		}
+	}
 
-            if (result != null)
-            {
-                highlightedMessage = result;
-                changed = true;
-            }
-        }
+	private void sendPreviewMessage()
+	{
+		clientThread.invokeLater(() ->
+		{
+			Color previewColour = config.previewColour();
+			String previewText = getPreviewText();
+			String message = PREVIEW_PREFIX
+				+ ColorUtil.wrapWithColorTag(previewText, previewColour)
+				+ " [" + toHex(previewColour) + "]";
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+		});
+	}
 
-        if (changed)
-        {
-            messageNode.setRuneLiteFormatMessage(highlightedMessage);
-            client.refreshChat();
-        }
-    }
+	private String getPreviewText()
+	{
+		if (!rules.isEmpty())
+		{
+			return rules.get(0).getText();
+		}
+		return "Example highlighted text";
+	}
 
-    private boolean isSupportedMessageType(ChatMessageType type)
-    {
-        /*
-         * CONSOLE is intentionally excluded. RuneLite and other plugins can
-         * generate console messages, and excluding it avoids feedback loops.
-         */
-        return type == ChatMessageType.GAMEMESSAGE
-            || type == ChatMessageType.SPAM
-            || type == ChatMessageType.ENGINE
-            || type == ChatMessageType.MESBOX
-            || type == ChatMessageType.LEVELUPMESSAGE;
-    }
+	private static String toHex(Color colour)
+	{
+		return String.format("#%02X%02X%02X", colour.getRed(), colour.getGreen(), colour.getBlue());
+	}
 
-    private void sendPreviewMessage()
-    {
-        clientThread.invokeLater(() ->
-        {
-            Color previewColour = config.previewColour();
-            String previewText = getPreviewText();
+	private void loadRules()
+	{
+		String configuredRules = config.rules();
+		if (configuredRules == null || configuredRules.trim().isEmpty())
+		{
+			rules = Collections.emptyList();
+			return;
+		}
 
-            String message = PREVIEW_PREFIX
-                + ColorUtil.wrapWithColorTag(previewText, previewColour)
-                + " [" + toHex(previewColour) + "]";
+		List<HighlightRule> parsedRules = new ArrayList<>();
+		String[] lines = configuredRules.split("\\R");
+		for (int index = 0; index < lines.length; index++)
+		{
+			String line = lines[index].trim();
+			if (line.isEmpty())
+			{
+				continue;
+			}
 
-            client.addChatMessage(
-                ChatMessageType.GAMEMESSAGE,
-                "",
-                message,
-                null);
-        });
-    }
+			try
+			{
+				parsedRules.add(HighlightRule.parse(line));
+			}
+			catch (IllegalArgumentException exception)
+			{
+				log.warn("Ignoring invalid highlight rule on line {}: {} ({})",
+					index + 1, line, exception.getMessage());
+			}
+		}
 
-    private String getPreviewText()
-    {
-        if (!rules.isEmpty())
-        {
-            return rules.get(0).getText();
-        }
-
-        return "Example highlighted text";
-    }
-
-    private static String toHex(Color colour)
-    {
-        return String.format(
-            "#%02X%02X%02X",
-            colour.getRed(),
-            colour.getGreen(),
-            colour.getBlue());
-    }
-
-    private void loadRules()
-    {
-        String configuredRules = config.rules();
-
-        if (configuredRules == null || configuredRules.trim().isEmpty())
-        {
-            rules = Collections.emptyList();
-            return;
-        }
-
-        List<HighlightRule> parsedRules = new ArrayList<>();
-        String[] lines = configuredRules.split("\\R");
-
-        for (int index = 0; index < lines.length; index++)
-        {
-            String line = lines[index].trim();
-
-            if (line.isEmpty())
-            {
-                continue;
-            }
-
-            try
-            {
-                parsedRules.add(HighlightRule.parse(line));
-            }
-            catch (IllegalArgumentException exception)
-            {
-                log.warn(
-                    "Ignoring invalid highlight rule on line {}: {} ({})",
-                    index + 1,
-                    line,
-                    exception.getMessage());
-            }
-        }
-
-        rules = Collections.unmodifiableList(parsedRules);
-        log.debug("Loaded {} custom text highlight rules", rules.size());
-    }
+		rules = Collections.unmodifiableList(parsedRules);
+		log.debug("Loaded {} custom text highlight rules", rules.size());
+	}
 }

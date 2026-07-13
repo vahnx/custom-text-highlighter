@@ -1,7 +1,6 @@
 # Custom Text Highlighter
-### Version 1.0
 
-Customize the color of any in-game chat message using simple rules.
+Highlights custom text in game messages using configurable colors and simple wildcard rules
 
 ## Features
 
@@ -13,6 +12,7 @@ Customize the color of any in-game chat message using simple rules.
     - ? = one character
     - | = OR
 - Unlimited rules
+- Optional highlighting for public chat, private messages, clan chat, friends chat, guest clan chat, and other supported chat types
 
 ## Screenshots
 ![Example 1](images/cth-full.png)
