@@ -36,8 +36,11 @@ Highlights custom text in game messages using configurable colors and simple wil
 [iron|coal|mithril,yellow]
 ```
 
-## Donations
+## Support Development
 
-If you've found **Custom Text Highlighter** useful and would like to support future development, you can buy me a coffee:
+If you find this plugin useful and would like to support its continued development:
 
-☕ https://paypal.me/twitchplaying
+- [Sponsor me on GitHub](https://github.com/sponsors/vahnx)
+- [Support me through PayPal](https://paypal.me/twitchplaying)
+
+Thank you for your support!
